@@ -1,0 +1,9 @@
+#/bin/env
+# usage: source ./envs.sh && go run .
+
+export GOTIFY_HOST="ws://<IP>:<PORT>"
+export GOTIFY_CLIENT_TOKEN="<TOKEN>"
+export TEMPLATE_PATH="./template.gotmpl"
+
+export TELEGRAM_CHAT_ID="<CHAT_ID>"
+export TELEGRAM_BOT_TOKEN="<BOT_TOKEN>"

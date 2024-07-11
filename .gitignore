@@ -3,4 +3,7 @@ vendor
 build
 *.so
 .env
-secrets.go
+template_default.gotmpl
+envs.sh
+template.gotmpl
+.vscode

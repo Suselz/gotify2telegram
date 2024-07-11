@@ -15,43 +15,77 @@ import (
 	"github.com/gotify/plugin-api"
 )
 
-type Message struct {
-	Organisation string
-	Date         string
-	Logs         string
-	Message      string
-	Title        string
-}
-
-const TEMPLATE_PATH = "./template.gotmpl"
-
-func main() {
-	lvl, ok := os.LookupEnv("LOG_LEVEL")
-	// LOG_LEVEL not set, let's default to debug
-	if !ok {
-		lvl = "debug"
+func check_all_envs() {
+	lvl, exist := os.LookupEnv("LOG_LEVEL")
+	if !exist {
+		lvl = "info"
 	}
-	// parse string, this is built-in feature of logrus
 	ll, err := log.ParseLevel(lvl)
 	if err != nil {
 		ll = log.DebugLevel
 	}
-	// set global log level
 	log.SetLevel(ll)
-	// For testing
-	p := &Plugin{nil, nil, "", "", ""}
-	p.get_websocket_msg(GOTIFY_HOST, GOTIFY_CLIENT_TOKEN) //(os.Getenv("GOTIFY_HOST"), os.Getenv("GOTIFY_CLIENT_TOKEN"))
 
+	isAllEnvSet := true
+	_, exist = os.LookupEnv("GOTIFY_HOST")
+	if !exist {
+		log.Error("GOTIFY_HOST not set")
+		isAllEnvSet = false
+	}
+	_, exist = os.LookupEnv("GOTIFY_CLIENT_TOKEN")
+	if !exist {
+		log.Error("Env GOTIFY_CLIENT_TOKEN not set")
+		isAllEnvSet = false
+	}
+	_, exist = os.LookupEnv("TELEGRAM_CHAT_ID")
+	if !exist {
+		log.Error("Env TELEGRAM_CHAT_ID not set")
+		isAllEnvSet = false
+	}
+
+	_, exist = os.LookupEnv("TELEGRAM_BOT_TOKEN")
+	if !exist {
+		log.Error("Env TELEGRAM_BOT_TOKEN not set")
+		isAllEnvSet = false
+	}
+	if !isAllEnvSet {
+		log.Fatal("Not all environment variables are set. Exiting.")
+	}
+
+	log.Infoln("Env TEMPLATE_PATH not set. Generating default template into file \"./template_default.gotmpl\"")
+	_, err = os.Stat(os.Getenv("TEMPLATE_PATH"))
+	if os.IsNotExist(err) {
+		os.Setenv("TEMPLATE_PATH", "./template_default.gotmpl")
+	}
+	filepath := os.Getenv("TEMPLATE_PATH")
+	if os.IsNotExist(err) {
+		defaulttemplate := "{{ .Title }}\n{{ .Date }}\n{{ .Message  }}"
+		err := os.WriteFile(filepath, []byte(defaulttemplate), 0666)
+		if err != nil {
+			log.Errorf("Error while writing default template file: %v\n", err)
+		}
+
+	}
+}
+
+func main() {
+	panic("this should be built as go plugin")
+	// FOR DEBUGING
+	//--------------------------------------
+	// check_all_envs()
+	// p := &Plugin{nil, nil, "", "", ""}
+	// p.get_websocket_msg(os.Getenv("GOTIFY_HOST"), os.Getenv("GOTIFY_CLIENT_TOKEN"))
+	//--------------------------------------
 }
 
 // GetGotifyPluginInfo returns gotify plugin info
 func GetGotifyPluginInfo() plugin.Info {
 	return plugin.Info{
 		Version:     "1.0",
-		Author:      "Anh Bui",
+		Author:      "Alexandr Dyakonov",
 		Name:        "Gotify 2 Telegram",
-		Description: "Telegram message fowarder for gotify",
-		ModulePath:  "https://github.com/anhbh310/gotify2telegram",
+		Description: "Telegram message forwarder for gotify",
+		ModulePath:  "https://github.com/suselz/gotify2telegram",
 	}
 }
 
@@ -104,11 +138,15 @@ func (p *Plugin) send_msg_to_telegram(msg string) {
 
 	req.Header.Set("Content-Type", "application/json")
 	log.Infof("Sending request to telegram")
-	log.Debugln("Msg:\n", msg)
+	log.Debugf("Msg:\n-----------------------\n%v\n-----------------------\n", msg)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Errorf("Send request fail: %v\n", err)
+		return
+	}
+	if resp.StatusCode != 200 {
+		log.Errorf("Send request fail: %q \n %v\n", resp.Status, resp)
 		return
 	}
 	defer resp.Body.Close()
@@ -128,8 +166,8 @@ func (p *Plugin) connect_websocket() {
 
 func (p *Plugin) get_websocket_msg(url string, token string) {
 	p.gotify_host = url + "/stream?token=" + token
-	p.chatid = chatid                         //os.Getenv("TELEGRAM_CHAT_ID")
-	p.telegram_bot_token = telegram_bot_token //os.Getenv("TELEGRAM_BOT_TOKEN")
+	p.chatid = os.Getenv("TELEGRAM_CHAT_ID")
+	p.telegram_bot_token = os.Getenv("TELEGRAM_BOT_TOKEN")
 	log.Debugln("Connecting to gotify")
 	go p.connect_websocket()
 
@@ -148,7 +186,7 @@ func (p *Plugin) get_websocket_msg(url string, token string) {
 		}
 
 		log.Debugln("Reading template file")
-		tmpl, err := os.ReadFile(TEMPLATE_PATH)
+		tmpl, err := os.ReadFile(os.Getenv("TEMPLATE_PATH"))
 		if err != nil {
 			log.Errorf("Error while reading template file: %v\n", err)
 		}
@@ -176,6 +214,8 @@ func (p *Plugin) SetMessageHandler(h plugin.MessageHandler) {
 }
 
 func (p *Plugin) Enable() error {
+	log.Debug("Enabling plugin gotify to telegram")
+	check_all_envs()
 	go p.get_websocket_msg(os.Getenv("GOTIFY_HOST"), os.Getenv("GOTIFY_CLIENT_TOKEN"))
 	return nil
 }
